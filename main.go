@@ -11,7 +11,42 @@ import (
 	"fyne.io/fyne/v2/widget"
 )
 
+type UmaPaths struct {
+	Target     string
+	GlobalPath string
+	JpPath     string
+	UmaPath    string
+	TempPath   string
+}
+
+func NewUmaPaths(appdata string) (UmaPaths, error) {
+	if appdata == "" {
+		return UmaPaths{}, fmt.Errorf("appdata environment variable not set")
+	}
+	target := filepath.Join(filepath.Dir(appdata), "LocalLow", "Cygames")
+	return UmaPaths{
+		Target:     target,
+		GlobalPath: filepath.Join(target, "Umamusumegb"),
+		JpPath:     filepath.Join(target, "Umamusumejp"),
+		UmaPath:    filepath.Join(target, "Umamusume"),
+		TempPath:   filepath.Join(target, "Umamusume_temp"),
+	}, nil
+}
+
+func (u UmaPaths) checkCurrent() (string, error) {
+	if _, err := os.Stat(u.JpPath); err == nil {
+		return "current uma version: JP", nil
+	} else if _, err := os.Stat(u.GlobalPath); err == nil {
+		return "current uma version: Global", nil
+	} else {
+		return "", fmt.Errorf("no uma folder found")
+	}
+}
+
 func main() {
+	u, err := NewUmaPaths(os.Getenv("APPDATA"))
+
+	fmt.Println(u)
 	a := app.New()
 	w := a.NewWindow("Uma Folder Changer")
 
@@ -20,11 +55,22 @@ func main() {
 
 	resultString := widget.NewLabel("")
 	resultString.Wrapping = fyne.TextWrapWord
+
+	if err != nil {
+		resultString.SetText(fmt.Sprintf("Error: %v", err))
+	}
+	msg, err := u.checkCurrent()
+	if err != nil {
+		resultString.SetText(fmt.Sprintf("Error: %v", err))
+	} else {
+		resultString.SetText(msg)
+	}
+
 	w.SetContent(container.NewVBox(
 		widget.NewButton("Click here to change folders", func() {
-			msg, err := changeFolder()
+			msg, err := u.changeFolder()
 			if err != nil {
-				resultString.SetText(fmt.Sprintf("Error %v", err))
+				resultString.SetText(fmt.Sprintf("Error: %v", err))
 			} else {
 				resultString.SetText(msg)
 			}
@@ -35,44 +81,33 @@ func main() {
 	w.ShowAndRun()
 }
 
-func changeFolder() (string, error) {
-	appdata := os.Getenv("APPDATA")
+func (u UmaPaths) changeFolder() (string, error) {
 
-	if appdata == "" {
-		return "", fmt.Errorf("No appdata found!")
-	}
-
-	targetDir := filepath.Join(filepath.Dir(appdata), "LocalLow", "Cygames")
-	jpPath := filepath.Join(targetDir, "Umamusumejp")
-	gbPath := filepath.Join(targetDir, "Umamusumegb")
-	umaPath := filepath.Join(targetDir, "Umamusume")
-	tempPath := filepath.Join(targetDir, "Umamusume_temp")
-
-	if _, err := os.Stat(targetDir); os.IsNotExist(err) {
+	if _, err := os.Stat(u.Target); err != nil {
 		return "", err
 	}
 
-	if _, err := os.Stat(jpPath); err == nil {
+	if _, err := os.Stat(u.JpPath); err == nil {
 		// this if goes from global to jp
-		if err := os.Rename(umaPath, tempPath); err != nil {
+		if err := os.Rename(u.UmaPath, u.TempPath); err != nil {
 			return "", err
 		}
-		if err := os.Rename(jpPath, umaPath); err != nil {
+		if err := os.Rename(u.JpPath, u.UmaPath); err != nil {
 			return "", err
 		}
-		if err := os.Rename(tempPath, gbPath); err != nil {
+		if err := os.Rename(u.TempPath, u.GlobalPath); err != nil {
 			return "", err
 		}
 		return "Swapped from global to jp. you can now launch jp uma.", nil
 
-	} else if _, err := os.Stat(gbPath); err == nil {
-		if err := os.Rename(umaPath, tempPath); err != nil {
+	} else if _, err := os.Stat(u.GlobalPath); err == nil {
+		if err := os.Rename(u.UmaPath, u.TempPath); err != nil {
 			return "", err
 		}
-		if err := os.Rename(gbPath, umaPath); err != nil {
+		if err := os.Rename(u.GlobalPath, u.UmaPath); err != nil {
 			return "", err
 		}
-		if err := os.Rename(tempPath, jpPath); err != nil {
+		if err := os.Rename(u.TempPath, u.JpPath); err != nil {
 			return "", err
 		}
 		return "Swapped from jp to global. you can now launch global uma.", nil
